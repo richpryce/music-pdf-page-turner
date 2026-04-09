@@ -1,4 +1,7 @@
 {
-  "database": "beads.db",
-  "jsonl_export": "issues.jsonl"
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "server",
+  "dolt_database": "music_pdf_page_turner",
+  "project_id": "6e6b5b20-f7c9-4f27-8820-74bdb9f15c3a"
 }
