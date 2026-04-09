@@ -2,29 +2,32 @@
 
 ## Project Overview
 
-**What:** [Brief description]
-**Stack:** [e.g., TypeScript, React, Node.js, PostgreSQL]
-**Status:** [Active development | Maintenance]
+**What:** Web-based music PDF viewer with hands-free head-nod gesture page turning via MediaPipe FaceMesh + browser camera
+**Stack:** Next.js 14, TypeScript, Tailwind CSS, pdfjs-dist, MediaPipe FaceMesh (CDN)
+**Status:** Active development (MVP complete)
 
 ## Commands
 
 ```
-npm run dev          # Dev server
+npm run dev          # Dev server (http://localhost:3000)
 npm run build        # Production build
-npm test             # Run tests
-npm run lint         # Lint
+npm test             # Run Vitest unit tests
+npm run typecheck    # TypeScript type check
+npm run lint         # ESLint
 ```
 
 ## Structure
 
 ```
 src/
-  components/     # UI components
-  services/       # Business logic
-  utils/          # Pure utilities
-  types/          # Type definitions
-  config/         # Configuration
-tests/            # Mirrors src/ structure
+  app/            # Next.js App Router (layout.tsx, page.tsx, globals.css)
+  components/     # UI components (pdf-viewer, gesture-status, camera-preview)
+  hooks/          # React hooks (use-pdf-viewer, use-gesture-detector)
+  utils/          # Pure utilities (nod-detector)
+  types/          # Type definitions (index.ts)
+tests/
+  unit/           # Vitest unit tests
+  setup.ts        # Test setup
 docs/             # SPEC.md, DECISIONS.md
 openspec/specs/   # Feature specifications
 ```
