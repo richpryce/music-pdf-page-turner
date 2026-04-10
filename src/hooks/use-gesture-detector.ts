@@ -134,6 +134,10 @@ export function useGestureDetector({
       setCameraError(null)
       setGestureState(prev => ({ ...prev, status: 'initializing' }))
 
+      if (!videoRef.current) {
+        throw new Error('Camera preview is not ready yet. Please try again.')
+      }
+
       // Get camera access
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'user', width: 640, height: 480 },
@@ -141,10 +145,15 @@ export function useGestureDetector({
       })
       streamRef.current = stream
 
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        await videoRef.current.play()
+      const videoEl = videoRef.current
+      if (!videoEl) {
+        throw new Error('Camera preview is not available on this device yet.')
       }
+
+      videoEl.srcObject = stream
+      await videoEl.play()
+
+      setIsActive(true)
 
       // Load MediaPipe
       await loadMediaPipe()
@@ -167,7 +176,6 @@ export function useGestureDetector({
       faceMesh.onResults((results: any) => {
         if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
           const landmarks = results.multiFaceLandmarks[0]
-          // Landmark 1 = nose tip
           const noseTip = landmarks[1]
           if (noseTip) {
             nodDetectorRef.current.feed(noseTip.y)
@@ -177,10 +185,10 @@ export function useGestureDetector({
 
       faceMeshRef.current = faceMesh
 
-      const camera = new Camera(videoRef.current, {
+      const camera = new Camera(videoEl, {
         onFrame: async () => {
-          if (faceMeshRef.current && videoRef.current) {
-            await faceMeshRef.current.send({ image: videoRef.current })
+          if (faceMeshRef.current) {
+            await faceMeshRef.current.send({ image: videoEl })
           }
         },
         width: 640,
@@ -190,7 +198,6 @@ export function useGestureDetector({
       await camera.start()
       cameraInstanceRef.current = camera
 
-      setIsActive(true)
       setGestureState(prev => ({
         ...prev,
         status: 'ready',
@@ -199,9 +206,29 @@ export function useGestureDetector({
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Camera error'
       setCameraError(msg)
-      setGestureState(prev => ({ ...prev, status: 'camera-off' }))
+
+      if (cameraInstanceRef.current) {
+        try {
+          cameraInstanceRef.current.stop()
+        } catch (_) {}
+        cameraInstanceRef.current = null
+      }
+
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop())
+        streamRef.current = null
+      }
+
+      if (cooldownTimerRef.current) {
+        clearInterval(cooldownTimerRef.current)
+        cooldownTimerRef.current = null
+      }
+
+      nodDetectorRef.current.reset()
+      setIsActive(false)
+      setGestureState(prev => ({ ...prev, status: 'camera-off', nodCount: 0 }))
     }
-  }, [loadMediaPipe, config.cooldownMs])
+  }, [loadMediaPipe])
 
   const stopCamera = useCallback(() => {
     if (cameraInstanceRef.current) {
