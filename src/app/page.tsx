@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useRef } from 'react'
 import { usePDFViewer } from '@/hooks/use-pdf-viewer'
 import { useGestureDetector } from '@/hooks/use-gesture-detector'
 import { PDFViewer } from '@/components/pdf-viewer'
@@ -18,6 +18,12 @@ export default function Home() {
     canUndo,
   } = usePDFViewer()
 
+  const nextPageRef = useRef(nextPage)
+
+  useEffect(() => {
+    nextPageRef.current = nextPage
+  }, [nextPage])
+
   const {
     gestureState,
     videoRef,
@@ -28,7 +34,7 @@ export default function Home() {
     updateConfig,
     cameraError,
   } = useGestureDetector({
-    onPageTurn: nextPage,
+    onPageTurn: () => nextPageRef.current(),
   })
 
   // Keyboard shortcuts
