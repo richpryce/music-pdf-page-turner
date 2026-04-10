@@ -5,10 +5,11 @@ import { GestureConfig, GestureState, DEFAULT_GESTURE_CONFIG } from '@/types'
 
 const mockGestureState = (overrides?: Partial<GestureState>): GestureState => ({
   status: 'camera-off',
-  nodCount: 0,
-  requiredNods: 3,
+  progress: { next: 0, previous: 0 },
+  activeAction: null,
   cooldownRemaining: 0,
-  lastNodAt: null,
+  lastTriggeredAction: null,
+  lastTriggeredAt: null,
   ...overrides,
 })
 
@@ -21,6 +22,8 @@ describe('GestureStatus component', () => {
     onStart: vi.fn(),
     onStop: vi.fn(),
     cameraError: null,
+    performanceMode: false,
+    onTogglePerformanceMode: vi.fn(),
   }
 
   it('shows "Enable Camera" when camera is off', () => {
@@ -28,7 +31,7 @@ describe('GestureStatus component', () => {
     expect(screen.getByRole('button', { name: /enable camera/i })).toBeInTheDocument()
   })
 
-  it('shows "Stop Camera" when camera is active', () => {
+  it('shows "Stop camera" when camera is active', () => {
     render(<GestureStatus {...defaultProps} isActive={true} />)
     expect(screen.getByRole('button', { name: /stop camera/i })).toBeInTheDocument()
   })
@@ -40,7 +43,7 @@ describe('GestureStatus component', () => {
     expect(onStart).toHaveBeenCalledOnce()
   })
 
-  it('calls onStop when Stop Camera is clicked', () => {
+  it('calls onStop when Stop camera is clicked', () => {
     const onStop = vi.fn()
     render(<GestureStatus {...defaultProps} isActive={true} onStop={onStop} />)
     fireEvent.click(screen.getByRole('button', { name: /stop camera/i }))
@@ -52,28 +55,26 @@ describe('GestureStatus component', () => {
     expect(screen.getByText(/permission denied/i)).toBeInTheDocument()
   })
 
-  it('shows "Ready" status text when camera is active and ready', () => {
+  it('shows Ready status text when camera is active and ready', () => {
     render(
       <GestureStatus
         {...defaultProps}
         isActive={true}
         gestureState={mockGestureState({ status: 'ready' })}
-      />
+      />,
     )
-    // The status span shows "Ready — nod 3x to turn page"
-    expect(screen.getByText(/ready — nod/i)).toBeInTheDocument()
+    expect(screen.getByText(/^Ready$/i)).toBeInTheDocument()
   })
 
-  it('shows nodding progress with count', () => {
+  it('shows progress for next gesture', () => {
     render(
       <GestureStatus
         {...defaultProps}
         isActive={true}
-        gestureState={mockGestureState({ status: 'nodding', nodCount: 2, requiredNods: 3 })}
-      />
+        gestureState={mockGestureState({ status: 'tracking', progress: { next: 1, previous: 0 } })}
+      />,
     )
-    expect(screen.getByText(/nodding/i)).toBeInTheDocument()
-    expect(screen.getAllByText('2/3').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText(/2× nod/i)).toBeInTheDocument()
   })
 
   it('shows cooldown status with time remaining', () => {
@@ -82,9 +83,8 @@ describe('GestureStatus component', () => {
         {...defaultProps}
         isActive={true}
         gestureState={mockGestureState({ status: 'cooldown', cooldownRemaining: 1500 })}
-      />
+      />,
     )
-    // The status text "Cooldown (1.5s)" appears in the status span
-    expect(screen.getByText(/cooldown \(/i)).toBeInTheDocument()
+    expect(screen.getByText(/cooldown 1.5s/i)).toBeInTheDocument()
   })
 })

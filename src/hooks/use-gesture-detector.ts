@@ -1,12 +1,17 @@
 'use client'
 
 import { useRef, useState, useCallback, useEffect } from 'react'
-import { GestureConfig, GestureState, DEFAULT_GESTURE_CONFIG } from '@/types'
-import { NodDetector } from '@/utils/nod-detector'
+import {
+  GestureAction,
+  GestureConfig,
+  GestureState,
+  DEFAULT_GESTURE_CONFIG,
+} from '@/types'
+import { GestureDetector } from '@/utils/gesture-detector'
 
 interface UseGestureDetectorOptions {
   config?: Partial<GestureConfig>
-  onPageTurn: () => void
+  onAction: (action: GestureAction) => void
 }
 
 interface UseGestureDetectorReturn {
@@ -22,7 +27,7 @@ interface UseGestureDetectorReturn {
 
 export function useGestureDetector({
   config: configOverrides,
-  onPageTurn,
+  onAction,
 }: UseGestureDetectorOptions): UseGestureDetectorReturn {
   const [config, setConfig] = useState<GestureConfig>({
     ...DEFAULT_GESTURE_CONFIG,
@@ -31,10 +36,11 @@ export function useGestureDetector({
 
   const [gestureState, setGestureState] = useState<GestureState>({
     status: 'camera-off',
-    nodCount: 0,
-    requiredNods: config.requiredNods,
+    progress: { next: 0, previous: 0 },
+    activeAction: null,
     cooldownRemaining: 0,
-    lastNodAt: null,
+    lastTriggeredAction: null,
+    lastTriggeredAt: null,
   })
 
   const [cameraError, setCameraError] = useState<string | null>(null)
@@ -42,42 +48,46 @@ export function useGestureDetector({
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
-  const animFrameRef = useRef<number | null>(null)
   const faceMeshRef = useRef<any>(null)
   const cameraInstanceRef = useRef<any>(null)
   const cooldownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const cooldownEndRef = useRef<number>(0)
 
-  const nodDetectorRef = useRef<NodDetector>(
-    new NodDetector(
-      {
-        threshold: config.nodThreshold,
-        windowMs: config.windowMs,
-        requiredNods: config.requiredNods,
-        cooldownMs: config.cooldownMs,
+  const detectorRef = useRef<GestureDetector | null>(null)
+
+  useEffect(() => {
+    detectorRef.current = new GestureDetector(config, {
+      onProgress: (action, count) => {
+        setGestureState(prev => ({
+          ...prev,
+          status: isActive ? 'tracking' : prev.status,
+          progress: { ...prev.progress, [action]: count },
+        }))
       },
-      () => {
-        // onNod fired
+      onTrigger: (action) => {
         setGestureState(prev => ({
           ...prev,
           status: 'turning',
-          nodCount: 0,
-          lastNodAt: Date.now(),
+          activeAction: action,
+          lastTriggeredAction: action,
+          lastTriggeredAt: Date.now(),
+          progress: { next: 0, previous: 0 },
         }))
-        onPageTurn()
 
-        // Start cooldown display
+        onAction(action)
+
         cooldownEndRef.current = Date.now() + config.cooldownMs
         if (cooldownTimerRef.current) clearInterval(cooldownTimerRef.current)
         cooldownTimerRef.current = setInterval(() => {
           const remaining = cooldownEndRef.current - Date.now()
           if (remaining <= 0) {
-            clearInterval(cooldownTimerRef.current!)
+            if (cooldownTimerRef.current) clearInterval(cooldownTimerRef.current)
             cooldownTimerRef.current = null
             setGestureState(prev => ({
               ...prev,
               status: 'ready',
               cooldownRemaining: 0,
+              activeAction: null,
             }))
           } else {
             setGestureState(prev => ({
@@ -88,24 +98,15 @@ export function useGestureDetector({
           }
         }, 100)
       },
-      (count: number) => {
-        setGestureState(prev => {
-          if (prev.status === 'cooldown' || prev.status === 'turning') return prev
-          return {
-            ...prev,
-            status: count > 0 ? 'nodding' : 'ready',
-            nodCount: count,
-          }
-        })
+      onActiveActionChange: action => {
+        setGestureState(prev => ({ ...prev, activeAction: action }))
       },
-    ),
-  )
+    })
+  }, [config, isActive, onAction])
 
   const loadMediaPipe = useCallback(async () => {
-    // Dynamically load MediaPipe via CDN scripts
     if (typeof window === 'undefined') return
 
-    // Load FaceMesh from CDN if not already loaded
     if (!(window as any).FaceMesh) {
       await new Promise<void>((resolve, reject) => {
         const script = document.createElement('script')
@@ -129,6 +130,35 @@ export function useGestureDetector({
     }
   }, [])
 
+  const stopCamera = useCallback(() => {
+    if (cameraInstanceRef.current) {
+      try {
+        cameraInstanceRef.current.stop()
+      } catch (_) {}
+      cameraInstanceRef.current = null
+    }
+
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop())
+      streamRef.current = null
+    }
+
+    if (cooldownTimerRef.current) {
+      clearInterval(cooldownTimerRef.current)
+      cooldownTimerRef.current = null
+    }
+
+    detectorRef.current?.reset()
+    setIsActive(false)
+    setGestureState(prev => ({
+      ...prev,
+      status: 'camera-off',
+      progress: { next: 0, previous: 0 },
+      activeAction: null,
+      cooldownRemaining: 0,
+    }))
+  }, [])
+
   const startCamera = useCallback(async () => {
     try {
       setCameraError(null)
@@ -138,7 +168,6 @@ export function useGestureDetector({
         throw new Error('Camera preview is not ready yet. Please try again.')
       }
 
-      // Get camera access
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'user', width: 640, height: 480 },
         audio: false,
@@ -146,16 +175,10 @@ export function useGestureDetector({
       streamRef.current = stream
 
       const videoEl = videoRef.current
-      if (!videoEl) {
-        throw new Error('Camera preview is not available on this device yet.')
-      }
-
       videoEl.srcObject = stream
       await videoEl.play()
-
       setIsActive(true)
 
-      // Load MediaPipe
       await loadMediaPipe()
 
       const FaceMesh = (window as any).FaceMesh
@@ -174,11 +197,19 @@ export function useGestureDetector({
       })
 
       faceMesh.onResults((results: any) => {
-        if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+        if (results.multiFaceLandmarks?.length > 0 && detectorRef.current) {
           const landmarks = results.multiFaceLandmarks[0]
           const noseTip = landmarks[1]
-          if (noseTip) {
-            nodDetectorRef.current.feed(noseTip.y)
+          const leftEyeOuter = landmarks[33]
+          const rightEyeOuter = landmarks[263]
+
+          if (noseTip && leftEyeOuter && rightEyeOuter) {
+            const tilt = Math.atan2(rightEyeOuter.y - leftEyeOuter.y, rightEyeOuter.x - leftEyeOuter.x)
+            detectorRef.current.feed({
+              noseX: noseTip.x,
+              noseY: noseTip.y,
+              tilt,
+            })
           }
         }
       })
@@ -201,78 +232,28 @@ export function useGestureDetector({
       setGestureState(prev => ({
         ...prev,
         status: 'ready',
-        nodCount: 0,
+        progress: { next: 0, previous: 0 },
       }))
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Camera error'
       setCameraError(msg)
-
-      if (cameraInstanceRef.current) {
-        try {
-          cameraInstanceRef.current.stop()
-        } catch (_) {}
-        cameraInstanceRef.current = null
-      }
-
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(t => t.stop())
-        streamRef.current = null
-      }
-
-      if (cooldownTimerRef.current) {
-        clearInterval(cooldownTimerRef.current)
-        cooldownTimerRef.current = null
-      }
-
-      nodDetectorRef.current.reset()
-      setIsActive(false)
-      setGestureState(prev => ({ ...prev, status: 'camera-off', nodCount: 0 }))
+      stopCamera()
     }
-  }, [loadMediaPipe])
-
-  const stopCamera = useCallback(() => {
-    if (cameraInstanceRef.current) {
-      try {
-        cameraInstanceRef.current.stop()
-      } catch (_) {}
-      cameraInstanceRef.current = null
-    }
-
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop())
-      streamRef.current = null
-    }
-
-    if (animFrameRef.current) {
-      cancelAnimationFrame(animFrameRef.current)
-      animFrameRef.current = null
-    }
-
-    if (cooldownTimerRef.current) {
-      clearInterval(cooldownTimerRef.current)
-      cooldownTimerRef.current = null
-    }
-
-    nodDetectorRef.current.reset()
-    setIsActive(false)
-    setGestureState(prev => ({ ...prev, status: 'camera-off', nodCount: 0 }))
-  }, [])
+  }, [loadMediaPipe, stopCamera])
 
   const updateConfig = useCallback((updates: Partial<GestureConfig>) => {
     setConfig(prev => {
-      const next = { ...prev, ...updates }
-      nodDetectorRef.current.updateOptions({
-        threshold: next.nodThreshold,
-        windowMs: next.windowMs,
-        requiredNods: next.requiredNods,
-        cooldownMs: next.cooldownMs,
-      })
+      const next = {
+        ...prev,
+        ...updates,
+        nextGesture: { ...prev.nextGesture, ...(updates.nextGesture ?? {}) },
+        previousGesture: { ...prev.previousGesture, ...(updates.previousGesture ?? {}) },
+      }
+      detectorRef.current?.updateConfig(next)
       return next
     })
-    setGestureState(prev => ({ ...prev, requiredNods: updates.requiredNods ?? prev.requiredNods }))
   }, [])
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       stopCamera()

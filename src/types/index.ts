@@ -1,15 +1,29 @@
+export type GestureKind = 'none' | 'nod' | 'shake' | 'tilt-left' | 'tilt-right'
+export type GestureAction = 'next' | 'previous'
+
+export interface GestureBinding {
+  kind: GestureKind
+  count: number
+}
+
 export interface GestureConfig {
-  nodThreshold: number      // Minimum Y-axis movement to count as a nod (0–1 normalized)
-  requiredNods: number      // Number of nods needed to trigger page turn
-  windowMs: number          // Time window in ms within which nods must occur
-  cooldownMs: number        // Cooldown after page turn in ms
+  nodThreshold: number
+  shakeThreshold: number
+  tiltThreshold: number
+  windowMs: number
+  cooldownMs: number
+  nextGesture: GestureBinding
+  previousGesture: GestureBinding
 }
 
 export const DEFAULT_GESTURE_CONFIG: GestureConfig = {
   nodThreshold: 0.015,
-  requiredNods: 3,
+  shakeThreshold: 0.02,
+  tiltThreshold: 0.12,
   windowMs: 3000,
   cooldownMs: 2000,
+  nextGesture: { kind: 'nod', count: 2 },
+  previousGesture: { kind: 'shake', count: 2 },
 }
 
 export type GestureStatus =
@@ -17,16 +31,22 @@ export type GestureStatus =
   | 'camera-off'
   | 'initializing'
   | 'ready'
-  | 'nodding'
+  | 'tracking'
   | 'cooldown'
   | 'turning'
 
+export interface GestureProgress {
+  next: number
+  previous: number
+}
+
 export interface GestureState {
   status: GestureStatus
-  nodCount: number
-  requiredNods: number
-  cooldownRemaining: number   // ms remaining in cooldown
-  lastNodAt: number | null    // timestamp
+  progress: GestureProgress
+  activeAction: GestureAction | null
+  cooldownRemaining: number
+  lastTriggeredAction: GestureAction | null
+  lastTriggeredAt: number | null
 }
 
 export interface PDFState {

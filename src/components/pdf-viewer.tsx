@@ -1,8 +1,8 @@
 'use client'
 
 import { useRef } from 'react'
-import { PDFState } from '@/types'
 import clsx from 'clsx'
+import { PDFState } from '@/types'
 
 interface PDFViewerProps {
   pdfState: PDFState
@@ -12,6 +12,7 @@ interface PDFViewerProps {
   onPrev: () => void
   onUndo: () => void
   canUndo: boolean
+  performanceMode: boolean
 }
 
 export function PDFViewer({
@@ -22,25 +23,28 @@ export function PDFViewer({
   onPrev,
   onUndo,
   canUndo,
+  performanceMode,
 }: PDFViewerProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const { file, pageCount, currentPage, loading, error } = pdfState
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) onOpenFile(file)
-    // Reset input so same file can be re-opened
+    const selected = e.target.files?.[0]
+    if (selected) onOpenFile(selected)
     e.target.value = ''
   }
 
-  const { file, pageCount, currentPage, loading, error } = pdfState
-
   return (
-    <div className="flex flex-col h-full">
-      {/* Toolbar */}
-      <div className="flex items-center gap-3 p-3 bg-gray-900 border-b border-gray-700 flex-shrink-0">
+    <div className="relative flex h-full flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-[#0b1020] shadow-[0_30px_120px_rgba(0,0,0,0.45)]">
+      <div
+        className={clsx(
+          'z-10 flex items-center gap-3 border-b border-white/10 bg-black/20 px-4 py-3 backdrop-blur-xl',
+          performanceMode && 'absolute left-4 right-4 top-4 rounded-2xl border bg-black/35',
+        )}
+      >
         <button
           onClick={() => fileInputRef.current?.click()}
-          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded font-medium transition-colors"
+          className="rounded-full bg-white px-4 py-2 text-sm font-medium text-slate-900 transition hover:bg-slate-200"
         >
           Open PDF
         </button>
@@ -48,56 +52,37 @@ export function PDFViewer({
           ref={fileInputRef}
           type="file"
           accept="application/pdf"
-          onChange={handleFileChange}
           className="hidden"
-          aria-label="Open PDF file"
+          onChange={handleFileChange}
         />
 
         {file && (
           <>
-            <span className="text-gray-400 text-sm truncate max-w-xs" title={file.name}>
-              {file.name}
-            </span>
+            <div className="min-w-0">
+              <div className="truncate text-sm font-medium text-white">{file.name}</div>
+              <div className="text-xs text-white/45">Page {currentPage} of {pageCount}</div>
+            </div>
 
             <div className="ml-auto flex items-center gap-2">
               {canUndo && (
                 <button
                   onClick={onUndo}
-                  className="px-2 py-1 bg-yellow-700 hover:bg-yellow-600 text-white text-xs rounded transition-colors"
-                  title="Undo last page turn (U)"
+                  className="rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1.5 text-xs font-medium text-amber-100 transition hover:bg-amber-400/20"
                 >
                   Undo
                 </button>
               )}
-
               <button
                 onClick={onPrev}
                 disabled={currentPage <= 1}
-                className={clsx(
-                  'px-3 py-1.5 rounded text-sm font-medium transition-colors',
-                  currentPage > 1
-                    ? 'bg-gray-700 hover:bg-gray-600 text-white'
-                    : 'bg-gray-800 text-gray-600 cursor-not-allowed',
-                )}
-                aria-label="Previous page"
+                className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 ← Prev
               </button>
-
-              <span className="text-sm text-gray-300 min-w-[7rem] text-center">
-                {loading ? 'Loading…' : `Page ${currentPage} of ${pageCount}`}
-              </span>
-
               <button
                 onClick={onNext}
                 disabled={currentPage >= pageCount}
-                className={clsx(
-                  'px-3 py-1.5 rounded text-sm font-medium transition-colors',
-                  currentPage < pageCount
-                    ? 'bg-gray-700 hover:bg-gray-600 text-white'
-                    : 'bg-gray-800 text-gray-600 cursor-not-allowed',
-                )}
-                aria-label="Next page"
+                className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Next →
               </button>
@@ -106,55 +91,46 @@ export function PDFViewer({
         )}
       </div>
 
-      {/* Canvas area */}
-      <div className="flex-1 overflow-auto bg-gray-950 flex items-start justify-center p-4">
+      <div className="relative flex-1 overflow-auto bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.12),_transparent_35%),linear-gradient(180deg,#0f172a_0%,#020617_100%)] p-4 sm:p-6 lg:p-8">
         {error && (
-          <div className="text-red-400 bg-red-900/20 rounded p-4 text-sm max-w-md">
+          <div className="mx-auto max-w-md rounded-2xl border border-rose-500/20 bg-rose-500/10 p-4 text-sm text-rose-100">
             <strong>Error:</strong> {error}
           </div>
         )}
 
         {!file && !error && (
-          <div className="flex flex-col items-center justify-center h-full text-gray-500 gap-4">
-            <svg
-              className="w-16 h-16 text-gray-700"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1}
-                d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-              />
-            </svg>
-            <p className="text-lg">Open a PDF score to get started</p>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded font-medium transition-colors"
-            >
-              Open PDF
-            </button>
+          <div className="flex h-full flex-col items-center justify-center gap-5 text-center text-white/65">
+            <div className="rounded-full border border-white/10 bg-white/5 p-5">
+              <svg className="h-10 w-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 13h6m-3-3v6m8 3H4a1 1 0 01-1-1V6a1 1 0 011-1h5.586a1 1 0 01.707.293l1.414 1.414A1 1 0 0012.414 7H20a1 1 0 011 1v11a1 1 0 01-1 1z" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-xl font-semibold text-white">Open a score and start gesturing</p>
+              <p className="mt-2 max-w-lg text-sm text-white/45">
+                Upload a PDF, enable the camera, and use configurable face gestures to move through the music hands-free.
+              </p>
+            </div>
           </div>
         )}
 
         {loading && (
-          <div className="flex items-center gap-2 text-gray-400 mt-8">
-            <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+          <div className="flex items-center justify-center gap-3 pt-10 text-white/70">
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/20 border-t-white" />
             Loading PDF…
           </div>
         )}
 
-        <canvas
-          ref={canvasRef}
-          className={clsx(
-            'shadow-2xl max-w-full',
-            !file || loading ? 'hidden' : 'block',
-          )}
-          aria-label={`PDF page ${currentPage}`}
-        />
+        <div className="flex justify-center">
+          <canvas
+            ref={canvasRef}
+            className={clsx(
+              'max-w-full rounded-[1.5rem] bg-white shadow-[0_20px_80px_rgba(15,23,42,0.5)]',
+              !file || loading ? 'hidden' : 'block',
+            )}
+            aria-label={`PDF page ${currentPage}`}
+          />
+        </div>
       </div>
     </div>
   )

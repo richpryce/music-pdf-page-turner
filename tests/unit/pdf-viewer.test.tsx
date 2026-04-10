@@ -24,11 +24,12 @@ describe('PDFViewer component', () => {
     onPrev: vi.fn(),
     onUndo: vi.fn(),
     canUndo: false,
+    performanceMode: false,
   }
 
-  it('shows "Open PDF score" placeholder when no file loaded', () => {
+  it('shows empty-state placeholder when no file loaded', () => {
     render(<PDFViewer {...defaultProps} />)
-    expect(screen.getByText(/open a pdf score/i)).toBeInTheDocument()
+    expect(screen.getByText(/open a score and start gesturing/i)).toBeInTheDocument()
   })
 
   it('shows filename when file is loaded', () => {
@@ -37,7 +38,7 @@ describe('PDFViewer component', () => {
       <PDFViewer
         {...defaultProps}
         pdfState={mockPDFState({ file, pageCount: 10, currentPage: 3 })}
-      />
+      />,
     )
     expect(screen.getByText('my-score.pdf')).toBeInTheDocument()
   })
@@ -48,9 +49,9 @@ describe('PDFViewer component', () => {
       <PDFViewer
         {...defaultProps}
         pdfState={mockPDFState({ file, pageCount: 20, currentPage: 5 })}
-      />
+      />,
     )
-    expect(screen.getByText('Page 5 of 20')).toBeInTheDocument()
+    expect(screen.getByText(/Page 5 of 20/i)).toBeInTheDocument()
   })
 
   it('calls onNext when Next button is clicked', () => {
@@ -61,9 +62,9 @@ describe('PDFViewer component', () => {
         {...defaultProps}
         pdfState={mockPDFState({ file, pageCount: 10, currentPage: 3 })}
         onNext={onNext}
-      />
+      />,
     )
-    fireEvent.click(screen.getByRole('button', { name: /next page/i }))
+    fireEvent.click(screen.getByRole('button', { name: /next/i }))
     expect(onNext).toHaveBeenCalledOnce()
   })
 
@@ -75,9 +76,9 @@ describe('PDFViewer component', () => {
         {...defaultProps}
         pdfState={mockPDFState({ file, pageCount: 10, currentPage: 3 })}
         onPrev={onPrev}
-      />
+      />,
     )
-    fireEvent.click(screen.getByRole('button', { name: /previous page/i }))
+    fireEvent.click(screen.getByRole('button', { name: /prev/i }))
     expect(onPrev).toHaveBeenCalledOnce()
   })
 
@@ -87,9 +88,9 @@ describe('PDFViewer component', () => {
       <PDFViewer
         {...defaultProps}
         pdfState={mockPDFState({ file, pageCount: 10, currentPage: 1 })}
-      />
+      />,
     )
-    expect(screen.getByRole('button', { name: /previous page/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /prev/i })).toBeDisabled()
   })
 
   it('disables Next button on last page', () => {
@@ -98,9 +99,9 @@ describe('PDFViewer component', () => {
       <PDFViewer
         {...defaultProps}
         pdfState={mockPDFState({ file, pageCount: 10, currentPage: 10 })}
-      />
+      />,
     )
-    expect(screen.getByRole('button', { name: /next page/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /next/i })).toBeDisabled()
   })
 
   it('shows Undo button when canUndo is true', () => {
@@ -110,7 +111,7 @@ describe('PDFViewer component', () => {
         {...defaultProps}
         pdfState={mockPDFState({ file, pageCount: 10, currentPage: 5 })}
         canUndo={true}
-      />
+      />,
     )
     expect(screen.getByRole('button', { name: /undo/i })).toBeInTheDocument()
   })
@@ -122,7 +123,7 @@ describe('PDFViewer component', () => {
         {...defaultProps}
         pdfState={mockPDFState({ file, pageCount: 10, currentPage: 5 })}
         canUndo={false}
-      />
+      />,
     )
     expect(screen.queryByRole('button', { name: /undo/i })).not.toBeInTheDocument()
   })
@@ -132,7 +133,7 @@ describe('PDFViewer component', () => {
       <PDFViewer
         {...defaultProps}
         pdfState={mockPDFState({ error: 'Invalid PDF file' })}
-      />
+      />,
     )
     expect(screen.getByText(/invalid pdf file/i)).toBeInTheDocument()
   })
@@ -143,7 +144,7 @@ describe('PDFViewer component', () => {
       <PDFViewer
         {...defaultProps}
         pdfState={mockPDFState({ file, loading: true })}
-      />
+      />,
     )
     expect(screen.getByText('Loading PDF…')).toBeInTheDocument()
   })

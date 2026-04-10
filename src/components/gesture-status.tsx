@@ -1,7 +1,7 @@
 'use client'
 
-import { GestureState, GestureConfig } from '@/types'
 import clsx from 'clsx'
+import { GestureConfig, GestureKind, GestureState } from '@/types'
 
 interface GestureStatusProps {
   gestureState: GestureState
@@ -11,6 +11,21 @@ interface GestureStatusProps {
   onStart: () => void
   onStop: () => void
   cameraError: string | null
+  performanceMode: boolean
+  onTogglePerformanceMode: () => void
+}
+
+const gestureOptions: { value: GestureKind; label: string }[] = [
+  { value: 'none', label: 'Disabled' },
+  { value: 'nod', label: 'Nod' },
+  { value: 'shake', label: 'Shake' },
+  { value: 'tilt-left', label: 'Tilt left' },
+  { value: 'tilt-right', label: 'Tilt right' },
+]
+
+function bindingLabel(kind: GestureKind, count: number) {
+  if (kind === 'none') return 'Disabled'
+  return `${count}× ${kind.replace('-', ' ')}`
 }
 
 export function GestureStatus({
@@ -21,174 +36,234 @@ export function GestureStatus({
   onStart,
   onStop,
   cameraError,
+  performanceMode,
+  onTogglePerformanceMode,
 }: GestureStatusProps) {
-  const { status, nodCount, requiredNods, cooldownRemaining } = gestureState
+  const { status, progress, activeAction, cooldownRemaining, lastTriggeredAction } = gestureState
 
-  const statusLabel = (): { text: string; color: string } => {
+  const statusText = (() => {
     switch (status) {
       case 'camera-off':
-        return { text: 'Camera off', color: 'text-gray-400' }
+        return 'Camera off'
       case 'initializing':
-        return { text: 'Starting camera…', color: 'text-yellow-400' }
+        return 'Starting camera…'
       case 'ready':
-        return { text: `Ready — nod ${requiredNods}x to turn page`, color: 'text-green-400' }
-      case 'nodding':
-        return { text: `Nodding… ${nodCount}/${requiredNods}`, color: 'text-blue-400' }
+        return 'Ready'
+      case 'tracking':
+        return activeAction ? `Tracking ${activeAction}` : 'Tracking gestures'
       case 'turning':
-        return { text: 'Turning page!', color: 'text-purple-400' }
+        return lastTriggeredAction ? `${lastTriggeredAction} page` : 'Turning page'
       case 'cooldown':
-        return {
-          text: `Cooldown (${(cooldownRemaining / 1000).toFixed(1)}s)`,
-          color: 'text-orange-400',
-        }
+        return `Cooldown ${(cooldownRemaining / 1000).toFixed(1)}s`
       default:
-        return { text: 'Unknown', color: 'text-gray-400' }
+        return 'Ready'
     }
-  }
-
-  const { text, color } = statusLabel()
+  })()
 
   return (
-    <div className="bg-gray-900 border border-gray-700 rounded-lg p-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-gray-300 uppercase tracking-wide">
-          Gesture Control
-        </h2>
-        <button
-          onClick={isActive ? onStop : onStart}
-          className={clsx(
-            'px-3 py-1 rounded text-sm font-medium transition-colors',
-            isActive
-              ? 'bg-red-700 hover:bg-red-600 text-white'
-              : 'bg-green-700 hover:bg-green-600 text-white',
-          )}
-        >
-          {isActive ? 'Stop Camera' : 'Enable Camera'}
-        </button>
+    <div className="space-y-4 rounded-3xl border border-white/10 bg-white/5 p-5 shadow-2xl backdrop-blur-xl">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.22em] text-white/45">Gesture control</p>
+          <h2 className="mt-1 text-lg font-semibold text-white">Hands-free navigation</h2>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onTogglePerformanceMode}
+            className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white/80 transition hover:bg-white/10"
+          >
+            {performanceMode ? 'Exit performance' : 'Performance mode'}
+          </button>
+          <button
+            onClick={isActive ? onStop : onStart}
+            className={clsx(
+              'rounded-full px-4 py-2 text-sm font-medium text-white transition',
+              isActive ? 'bg-rose-500 hover:bg-rose-400' : 'bg-emerald-500 hover:bg-emerald-400',
+            )}
+          >
+            {isActive ? 'Stop camera' : 'Enable camera'}
+          </button>
+        </div>
       </div>
 
       {cameraError && (
-        <p className="text-red-400 text-sm bg-red-900/20 rounded p-2">{cameraError}</p>
+        <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 p-3 text-sm text-rose-200">
+          {cameraError}
+        </div>
       )}
 
-      {/* Status */}
-      <div className="flex items-center gap-2">
-        <div
-          className={clsx(
-            'w-2 h-2 rounded-full flex-shrink-0',
-            status === 'ready' && 'bg-green-400 animate-pulse',
-            status === 'nodding' && 'bg-blue-400 animate-bounce',
-            status === 'turning' && 'bg-purple-400',
-            status === 'cooldown' && 'bg-orange-400',
-            (status === 'camera-off' || status === 'initializing') && 'bg-gray-500',
-          )}
-        />
-        <span className={clsx('text-sm', color)}>{text}</span>
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">Status</div>
+          <div className="mt-2 flex items-center gap-2 text-sm text-white">
+            <span
+              className={clsx(
+                'h-2.5 w-2.5 rounded-full',
+                status === 'ready' && 'bg-emerald-400',
+                status === 'tracking' && 'bg-sky-400',
+                status === 'turning' && 'bg-violet-400',
+                status === 'cooldown' && 'bg-amber-400',
+                (status === 'camera-off' || status === 'initializing') && 'bg-white/30',
+              )}
+            />
+            <span>{statusText}</span>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">Next page</div>
+          <div className="mt-2 text-sm text-white">{bindingLabel(config.nextGesture.kind, config.nextGesture.count)}</div>
+          <div className="mt-2 h-2 rounded-full bg-white/10">
+            <div
+              className="h-2 rounded-full bg-emerald-400 transition-all"
+              style={{ width: `${Math.min(100, (progress.next / Math.max(config.nextGesture.count, 1)) * 100)}%` }}
+            />
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
+          <div className="text-[11px] uppercase tracking-[0.18em] text-white/45">Previous page</div>
+          <div className="mt-2 text-sm text-white">{bindingLabel(config.previousGesture.kind, config.previousGesture.count)}</div>
+          <div className="mt-2 h-2 rounded-full bg-white/10">
+            <div
+              className="h-2 rounded-full bg-sky-400 transition-all"
+              style={{ width: `${Math.min(100, (progress.previous / Math.max(config.previousGesture.count, 1)) * 100)}%` }}
+            />
+          </div>
+        </div>
       </div>
 
-      {/* Nod progress bar */}
-      {isActive && status !== 'camera-off' && (
-        <div className="space-y-1">
-          <div className="flex justify-between text-xs text-gray-500">
-            <span>Nod progress</span>
-            <span>{nodCount}/{requiredNods}</span>
-          </div>
-          <div className="w-full bg-gray-800 rounded-full h-2">
-            <div
-              className="bg-blue-500 h-2 rounded-full transition-all duration-200"
-              style={{ width: `${requiredNods > 0 ? (nodCount / requiredNods) * 100 : 0}%` }}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Cooldown bar */}
-      {status === 'cooldown' && (
-        <div className="space-y-1">
-          <div className="flex justify-between text-xs text-gray-500">
-            <span>Cooldown</span>
-          </div>
-          <div className="w-full bg-gray-800 rounded-full h-2">
-            <div
-              className="bg-orange-500 h-2 rounded-full transition-all duration-100"
-              style={{ width: `${(cooldownRemaining / config.cooldownMs) * 100}%` }}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Config controls */}
-      <details className="text-xs">
-        <summary className="cursor-pointer text-gray-500 hover:text-gray-300 select-none">
-          Calibration settings
-        </summary>
-        <div className="mt-3 space-y-3">
-          <div>
-            <label className="flex justify-between text-gray-400 mb-1">
-              <span>Sensitivity (nod threshold)</span>
-              <span>{config.nodThreshold.toFixed(3)}</span>
+      <details className="rounded-2xl border border-white/10 bg-black/20 p-4" open={!performanceMode}>
+        <summary className="cursor-pointer select-none text-sm font-medium text-white/85">Gesture mapping & calibration</summary>
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <div className="space-y-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <h3 className="text-sm font-medium text-white">Next page gesture</h3>
+            <label className="block text-xs text-white/55">
+              Gesture type
+              <select
+                value={config.nextGesture.kind}
+                onChange={e => onUpdateConfig({ nextGesture: { kind: e.target.value as GestureKind } as any })}
+                className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none"
+              >
+                {gestureOptions.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </label>
-            <input
-              type="range"
-              min="0.005"
-              max="0.05"
-              step="0.001"
-              value={config.nodThreshold}
-              onChange={e => onUpdateConfig({ nodThreshold: parseFloat(e.target.value) })}
-              className="w-full accent-blue-500"
-            />
-            <div className="flex justify-between text-gray-600 text-xs mt-0.5">
-              <span>More sensitive</span>
-              <span>Less sensitive</span>
-            </div>
+            <label className="block text-xs text-white/55">
+              Repetitions
+              <input
+                type="range"
+                min="1"
+                max="4"
+                step="1"
+                value={config.nextGesture.count}
+                onChange={e => onUpdateConfig({ nextGesture: { count: parseInt(e.target.value, 10) } as any })}
+                className="mt-2 w-full accent-emerald-400"
+              />
+              <div className="mt-1 text-sm text-white">{config.nextGesture.count}</div>
+            </label>
           </div>
 
-          <div>
-            <label className="flex justify-between text-gray-400 mb-1">
-              <span>Required nods</span>
-              <span>{config.requiredNods}</span>
+          <div className="space-y-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <h3 className="text-sm font-medium text-white">Previous page gesture</h3>
+            <label className="block text-xs text-white/55">
+              Gesture type
+              <select
+                value={config.previousGesture.kind}
+                onChange={e => onUpdateConfig({ previousGesture: { kind: e.target.value as GestureKind } as any })}
+                className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-white outline-none"
+              >
+                {gestureOptions.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </label>
-            <input
-              type="range"
-              min="2"
-              max="5"
-              step="1"
-              value={config.requiredNods}
-              onChange={e => onUpdateConfig({ requiredNods: parseInt(e.target.value, 10) })}
-              className="w-full accent-blue-500"
-            />
+            <label className="block text-xs text-white/55">
+              Repetitions
+              <input
+                type="range"
+                min="1"
+                max="4"
+                step="1"
+                value={config.previousGesture.count}
+                onChange={e => onUpdateConfig({ previousGesture: { count: parseInt(e.target.value, 10) } as any })}
+                className="mt-2 w-full accent-sky-400"
+              />
+              <div className="mt-1 text-sm text-white">{config.previousGesture.count}</div>
+            </label>
           </div>
 
-          <div>
-            <label className="flex justify-between text-gray-400 mb-1">
-              <span>Time window</span>
-              <span>{(config.windowMs / 1000).toFixed(1)}s</span>
+          <div className="space-y-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <h3 className="text-sm font-medium text-white">Motion thresholds</h3>
+            <label className="block text-xs text-white/55">
+              Nod sensitivity
+              <input
+                type="range"
+                min="0.005"
+                max="0.05"
+                step="0.001"
+                value={config.nodThreshold}
+                onChange={e => onUpdateConfig({ nodThreshold: parseFloat(e.target.value) })}
+                className="mt-2 w-full accent-emerald-400"
+              />
             </label>
-            <input
-              type="range"
-              min="1500"
-              max="6000"
-              step="500"
-              value={config.windowMs}
-              onChange={e => onUpdateConfig({ windowMs: parseInt(e.target.value, 10) })}
-              className="w-full accent-blue-500"
-            />
+            <label className="block text-xs text-white/55">
+              Shake sensitivity
+              <input
+                type="range"
+                min="0.005"
+                max="0.05"
+                step="0.001"
+                value={config.shakeThreshold}
+                onChange={e => onUpdateConfig({ shakeThreshold: parseFloat(e.target.value) })}
+                className="mt-2 w-full accent-sky-400"
+              />
+            </label>
+            <label className="block text-xs text-white/55">
+              Tilt sensitivity
+              <input
+                type="range"
+                min="0.04"
+                max="0.35"
+                step="0.01"
+                value={config.tiltThreshold}
+                onChange={e => onUpdateConfig({ tiltThreshold: parseFloat(e.target.value) })}
+                className="mt-2 w-full accent-violet-400"
+              />
+            </label>
           </div>
 
-          <div>
-            <label className="flex justify-between text-gray-400 mb-1">
-              <span>Cooldown</span>
-              <span>{(config.cooldownMs / 1000).toFixed(1)}s</span>
+          <div className="space-y-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <h3 className="text-sm font-medium text-white">Timing</h3>
+            <label className="block text-xs text-white/55">
+              Gesture window ({(config.windowMs / 1000).toFixed(1)}s)
+              <input
+                type="range"
+                min="1200"
+                max="6000"
+                step="200"
+                value={config.windowMs}
+                onChange={e => onUpdateConfig({ windowMs: parseInt(e.target.value, 10) })}
+                className="mt-2 w-full accent-white"
+              />
             </label>
-            <input
-              type="range"
-              min="500"
-              max="5000"
-              step="500"
-              value={config.cooldownMs}
-              onChange={e => onUpdateConfig({ cooldownMs: parseInt(e.target.value, 10) })}
-              className="w-full accent-blue-500"
-            />
+            <label className="block text-xs text-white/55">
+              Cooldown ({(config.cooldownMs / 1000).toFixed(1)}s)
+              <input
+                type="range"
+                min="500"
+                max="5000"
+                step="250"
+                value={config.cooldownMs}
+                onChange={e => onUpdateConfig({ cooldownMs: parseInt(e.target.value, 10) })}
+                className="mt-2 w-full accent-white"
+              />
+            </label>
           </div>
         </div>
       </details>
