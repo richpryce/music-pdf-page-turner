@@ -76,6 +76,9 @@ ehthumbs.db
 openspec/drafts/
 *.draft.md
 
+# TypeScript build info
+*.tsbuildinfo
+
 # Dolt database files (added by bd init)
 .dolt/
 *.db
